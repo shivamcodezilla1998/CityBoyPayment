@@ -1,0 +1,97 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-canvas: #F7F8FB;
+  --bg-surface: #FFFFFF;
+  --bg-subtle: #F1F3F9;
+  --border-soft: #E6E8EF;
+  --border-strong: #D5D9E2;
+  --text-primary: #0B1020;
+  --text-secondary: #4A5167;
+  --text-tertiary: #8189A0;
+  --text-inverse: #FFFFFF;
+  --brand-50: #EEF1FF;
+  --brand-100: #DCE2FF;
+  --brand-300: #8B96F5;
+  --brand-500: #4C5BE0;
+  --brand-600: #3A47C7;
+  --brand-700: #2C36A0;
+  --accent-500: #14C8B8;
+  --success-500: #16A34A;
+  --success-50: #ECFDF5;
+  --warning-500: #F59E0B;
+  --warning-50: #FFFBEB;
+  --danger-500: #EF4444;
+  --danger-50: #FEF2F2;
+  --info-500: #2563EB;
+  --info-50: #EFF6FF;
+  --chart-1: #4C5BE0;
+  --chart-2: #14C8B8;
+  --chart-3: #F59E0B;
+  --chart-4: #8B5CF6;
+  --chart-5: #EC4899;
+  --chart-6: #06B6D4;
+  --chart-7: #10B981;
+  --chart-8: #F43F5E;
+
+  /* shadcn-compatible tokens mapped to Aurora Light */
+  --background: 0 0% 100%;
+  --foreground: 224 52% 9%;
+  --card: 0 0% 100%;
+  --card-foreground: 224 52% 9%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 224 52% 9%;
+  --primary: 233 71% 59%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 228 33% 95%;
+  --secondary-foreground: 224 52% 9%;
+  --muted: 228 33% 95%;
+  --muted-foreground: 224 14% 56%;
+  --accent: 177 80% 43%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border: 226 17% 91%;
+  --input: 226 17% 91%;
+  --ring: 233 71% 59%;
+  --radius: 0.75rem;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: var(--bg-canvas);
+  color: var(--text-primary);
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Tabular numbers for metrics */
+.font-mono, .tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-subtle);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
