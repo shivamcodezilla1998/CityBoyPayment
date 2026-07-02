@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { X } from 'lucide-react';
 import { cn } from '../ui/Button';
 import { motion, AnimatePresence } from 'framer-motion';

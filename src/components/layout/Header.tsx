@@ -1,6 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Menu, Search, Bell, User, Settings, LogOut, Plus, Calendar as CalendarIcon, ChevronDown, Clock, CheckCircle2, X, Gift, FileText } from 'lucide-react';
-import { Drawer } from '../ui/Drawer';
+import { useState, useRef, useEffect } from 'react';
+import { Menu, Search, Bell, User, Settings, LogOut, Plus, Calendar as CalendarIcon, ChevronDown, X, Gift, FileText } from 'lucide-react';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { useNavigate } from 'react-router-dom';

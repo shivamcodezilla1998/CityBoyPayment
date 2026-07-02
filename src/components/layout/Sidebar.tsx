@@ -1,8 +1,7 @@
-import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard, Gift, Users, CreditCard,
-  FileText, Settings, User, Bell, LogOut, X, ChevronLeft,
+  FileText, Settings, User, X, ChevronLeft,
   ArrowLeftRight,
   Sparkles
 } from 'lucide-react';

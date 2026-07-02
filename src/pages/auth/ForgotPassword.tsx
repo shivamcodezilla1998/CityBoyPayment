@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react'
@@ -9,7 +9,7 @@ export function ForgotPassword() {
   const [emailErr, setEmailErr] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
-  const variants = {
+  const variants: any = {
     enter: { x: 48, opacity: 0 },
     center: { x: 0, opacity: 1, transition: { duration: 0.25, ease: 'easeOut' } },
     exit: { x: -48, opacity: 0, transition: { duration: 0.2 } },
