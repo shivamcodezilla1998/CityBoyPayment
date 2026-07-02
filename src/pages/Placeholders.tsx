@@ -98,7 +98,7 @@ export function RewardRequests() {
   const series = [{ name: 'Requests', data: [12, 19, 15, 25, 22, 30, 28] }];
 
   return (
-    <PageContainer title="Reward Requests" description="Manage all member reward requests here.">
+    <PageContainer title="Gift Card Requests" description="Manage all member gift card requests here.">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         <div className="lg:col-span-2 bg-white p-6 rounded-2xl shadow-sm border border-soft relative">
           <div className="flex justify-between items-center mb-4">

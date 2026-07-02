@@ -1,6 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import {
-  LayoutDashboard, Gift, Users, CreditCard,
+  LayoutDashboard, Gift, Users,
   FileText, Settings, User, X, ChevronLeft,
   ArrowLeftRight,
   Sparkles
@@ -12,9 +12,8 @@ const menuGroups = [
     title: 'MAIN MENU',
     items: [
       { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-      { icon: Gift, label: 'Reward Requests', path: '/reward-requests', badge: '12' },
+      { icon: Gift, label: 'Gift Card Requests', path: '/reward-requests', badge: '12' },
       { icon: Users, label: 'Members', path: '/members' },
-      { icon: CreditCard, label: 'Gift Cards', path: '/gift-cards', badge: 'New', badgeColor: 'bg-brand-50 text-brand-500' },
       { icon: ArrowLeftRight, label: 'Transactions', path: '/transactions' },
       { icon: FileText, label: 'Reports', path: '/reports' },
     ]
@@ -118,7 +117,7 @@ export function Sidebar({ isOpen, setIsOpen, isMobile }: SidebarProps) {
                     </div>
 
                     {isOpen && item.badge && (
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${item.badgeColor || 'bg-brand-100 text-brand-700'}`}>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-100 text-brand-700">
                         {item.badge}
                       </span>
                     )}

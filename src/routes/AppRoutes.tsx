@@ -5,7 +5,7 @@ import { ResetPassword } from '../pages/auth/ResetPassword';
 import { Dashboard } from '../pages/dashboard/Dashboard';
 import { MainLayout } from '../components/layout/MainLayout';
 import {
-  RewardRequests, Members, GiftCards, Transactions,
+  RewardRequests, Members, Transactions,
   Reports, Settings, Profile, Notifications, AuditLogs
 } from '../pages/Placeholders';
 
@@ -24,7 +24,6 @@ export function AppRoutes() {
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/reward-requests" element={<RewardRequests />} />
         <Route path="/members" element={<Members />} />
-        <Route path="/gift-cards" element={<GiftCards />} />
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/reports" element={<Reports />} />
         <Route path="/notifications" element={<Notifications />} />
