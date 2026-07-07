@@ -44,47 +44,140 @@ const getPieOptions = (labels: string[]): ApexOptions => ({
 
 // --- Components ---
 
+import { useEffect, useCallback, useRef } from 'react';
+import { rewardsRedemptionService } from '../services/rewardsRedemptionService';
+
+function mapRedemptionToTableRow(redemption: any) {
+  return {
+    id: redemption.request_id,
+    user: {
+      id: redemption.user_id || 'N/A',
+      name: redemption.member_name,
+      email: redemption.member_email,
+      avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(redemption.member_name)}&background=random`,
+      points: redemption.points_redeemed
+    },
+    giftCard: redemption.redemption_type,
+    points: redemption.points_redeemed,
+    amount: redemption.monetary_value,
+    currency: redemption.currency,
+    date: redemption.created_at,
+    status: redemption.status.charAt(0).toUpperCase() + redemption.status.slice(1),
+    reviewedBy: redemption.reviewed_by,
+    reviewedAt: redemption.reviewed_at,
+    rejectionReason: redemption.rejection_reason,
+    processedAt: redemption.processed_at,
+    ledgerId: redemption.ledger_id,
+    refundLedgerId: redemption.refund_ledger_id
+  };
+}
+
 export function RewardRequests() {
-  const { requests, updateRequestStatus } = useAppContext();
+  const [requests, setRequests] = useState<any[]>([]);
+  const [kpis, setKpis] = useState<any>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  
+  const [activeCursor, setActiveCursor] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<(string | null)[]>([]);
+  
+  const [isLoading, setIsLoading] = useState(false);
+  const [actionInProgress, setActionInProgress] = useState(false);
+
   const [selectedRequest, setSelectedRequest] = useState<any>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [isApproveModalOpen, setIsApproveModalOpen] = useState(false);
   const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
-  const [adminNotes, setAdminNotes] = useState('');
+
   const [rejectReason, setRejectReason] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
+  
   const [filterStatus, setFilterStatus] = useState<string>('All');
-  const itemsPerPage = 10;
-
   const [selectedRowIds, setSelectedRowIds] = useState<string[]>([]);
+  
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  const filteredRequests = filterStatus === 'All' ? requests : requests.filter((r: any) => r.status === filterStatus);
-  const totalPages = Math.ceil(filteredRequests.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const currentRequests = filteredRequests.slice(startIndex, startIndex + itemsPerPage);
+  const fetchData = useCallback(async (cursorToFetch: string | null = null, isNewFilter: boolean = false) => {
+    if (abortControllerRef.current) abortControllerRef.current.abort();
+    abortControllerRef.current = new AbortController();
+    
+    setIsLoading(true);
+    try {
+      const response = await rewardsRedemptionService.getRedemptions(
+        { status: filterStatus === 'All' ? 'all' : filterStatus.toLowerCase() as any },
+        cursorToFetch,
+        10,
+        { signal: abortControllerRef.current.signal }
+      );
+      
+      const responseData = response?.data || [];
+      setRequests(responseData.map(mapRedemptionToTableRow));
+      setKpis(response?.kpis || null);
+      setNextCursor(response?.nextCursor || null);
+      
+      if (isNewFilter) {
+        setCursorHistory([]);
+        setActiveCursor(null);
+      }
+    } catch (e: any) {
+      if (e.name === 'CanceledError') return;
+      if (e.response?.status === 403) toast.error('Admin access is required.');
+      else toast.error('Failed to fetch requests.');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [filterStatus]);
+
+  useEffect(() => {
+    fetchData(null, true);
+  }, [fetchData]);
+
+  const handleNext = () => {
+    if (!nextCursor) return;
+    setCursorHistory(prev => [...prev, activeCursor]);
+    setActiveCursor(nextCursor);
+    fetchData(nextCursor);
+  };
+
+  const handlePrevious = () => {
+    if (cursorHistory.length === 0) return;
+    const newHistory = [...cursorHistory];
+    const prevCursor = newHistory.pop() || null;
+    setCursorHistory(newHistory);
+    setActiveCursor(prevCursor);
+    fetchData(prevCursor);
+  };
 
   const handleSelectAll = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.checked) {
-      setSelectedRowIds(currentRequests.map((r: any) => r.id));
-    } else {
-      setSelectedRowIds([]);
-    }
+    if (e.target.checked) setSelectedRowIds(requests.map(r => r.id));
+    else setSelectedRowIds([]);
   };
 
   const handleSelectRow = (id: string) => {
     setSelectedRowIds(prev => prev.includes(id) ? prev.filter(rowId => rowId !== id) : [...prev, id]);
   };
 
-  const handleBulkAction = (action: 'Approved' | 'Rejected') => {
-    selectedRowIds.forEach(id => updateRequestStatus(id, action));
-    toast.success(`Bulk ${action.toLowerCase()} completed for ${selectedRowIds.length} requests!`);
-    setSelectedRowIds([]);
+  const handleBulkAction = async (action: 'Approved' | 'Rejected') => {
+    if (actionInProgress) return;
+    setActionInProgress(true);
+    try {
+      for (const id of selectedRowIds) {
+        if (action === 'Approved') await rewardsRedemptionService.approveRedemption(id);
+        else await rewardsRedemptionService.rejectRedemption(id, { reason: 'Bulk rejected by admin' });
+      }
+      toast.success(`Bulk ${action.toLowerCase()} completed for ${selectedRowIds.length} requests!`);
+      setSelectedRowIds([]);
+      fetchData(activeCursor);
+    } catch (e: any) {
+      toast.error('Some requests failed during bulk action.');
+      fetchData(activeCursor);
+    } finally {
+      setActionInProgress(false);
+    }
   };
 
   const exportToCSV = () => {
     const csvContent = "data:text/csv;charset=utf-8,"
       + "Request ID,Member,Email,Gift Card,Points,Date,Status\n"
-      + filteredRequests.map((r: any) => `${r.id},${r.user.name},${r.user.email},${r.giftCard},${r.points},${new Date(r.date).toLocaleDateString()},${r.status}`).join("\n");
+      + requests.map((r: any) => `${r.id},${r.user.name},${r.user.email},${r.giftCard},${r.points},${new Date(r.date).toLocaleDateString()},${r.status}`).join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -93,6 +186,44 @@ export function RewardRequests() {
     link.click();
     link.remove();
     toast.success('Export completed!');
+  };
+
+  const approveRequest = async () => {
+    if (!selectedRequest || actionInProgress) return;
+    setActionInProgress(true);
+    try {
+      await rewardsRedemptionService.approveRedemption(selectedRequest.id);
+      toast.success('Redemption request approved successfully.');
+      setIsApproveModalOpen(false);
+      setIsDrawerOpen(false);
+      fetchData(activeCursor);
+    } catch (error: any) {
+      if (error.response?.status === 409) toast.error('This request is no longer pending. Refreshing data.');
+      else if (error.response?.status === 404) toast.error('Redemption request not found.');
+      else toast.error('Failed to approve redemption.');
+      fetchData(activeCursor);
+    } finally {
+      setActionInProgress(false);
+    }
+  };
+
+  const rejectRequest = async () => {
+    if (!selectedRequest || !rejectReason || actionInProgress) return;
+    setActionInProgress(true);
+    try {
+      await rewardsRedemptionService.rejectRedemption(selectedRequest.id, { reason: rejectReason });
+      toast.success('Redemption request rejected and points refunded successfully.');
+      setIsRejectModalOpen(false);
+      setIsDrawerOpen(false);
+      fetchData(activeCursor);
+    } catch (error: any) {
+      if (error.response?.status === 409) toast.error('This request is no longer pending. Refreshing data.');
+      else if (error.response?.status === 404) toast.error('Redemption request not found.');
+      else toast.error('Failed to reject redemption.');
+      fetchData(activeCursor);
+    } finally {
+      setActionInProgress(false);
+    }
   };
 
   const series = [{ name: 'Requests', data: [12, 19, 15, 25, 22, 30, 28] }];
@@ -116,15 +247,15 @@ export function RewardRequests() {
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-soft flex flex-col justify-center gap-4">
           <div className="p-4 bg-amber-50 rounded-xl flex items-center gap-4 border border-amber-100">
             <Clock className="text-warning-500 w-8 h-8" />
-            <div><p className="text-sm font-medium text-amber-700">Pending</p><p className="text-2xl font-bold text-amber-900">{requests.filter((r: any) => r.status === 'Pending').length}</p></div>
+            <div><p className="text-sm font-medium text-amber-700">Pending</p><p className="text-2xl font-bold text-amber-900">{kpis?.counts?.pending ?? 0}</p></div>
           </div>
           <div className="p-4 bg-brand-50 rounded-xl flex items-center gap-4 border border-brand-100">
             <CheckCircle2 className="text-brand-500 w-8 h-8" />
-            <div><p className="text-sm font-medium text-brand-700">Approved</p><p className="text-2xl font-bold text-brand-900">{requests.filter((r: any) => r.status === 'Approved').length}</p></div>
+            <div><p className="text-sm font-medium text-brand-700">Approved</p><p className="text-2xl font-bold text-brand-900">{kpis?.counts?.approved ?? 0}</p></div>
           </div>
           <div className="p-4 bg-red-50 rounded-xl flex items-center gap-4 border border-red-100">
             <XCircle className="text-danger-500 w-8 h-8" />
-            <div><p className="text-sm font-medium text-red-700">Rejected</p><p className="text-2xl font-bold text-red-900">{requests.filter((r: any) => r.status === 'Rejected').length}</p></div>
+            <div><p className="text-sm font-medium text-red-700">Rejected</p><p className="text-2xl font-bold text-red-900">{kpis?.counts?.rejected ?? 0}</p></div>
           </div>
         </div>
       </div>
@@ -133,20 +264,20 @@ export function RewardRequests() {
         <div className="p-5 border-b border-soft flex justify-between items-center bg-white/50 backdrop-blur-sm">
           <div>
             <h3 className="font-bold text-primary">All Requests</h3>
-            <p className="text-xs text-secondary font-medium">Showing {filteredRequests.length} total items</p>
+            <p className="text-xs text-secondary font-medium">Page {cursorHistory.length + 1}</p>
           </div>
           <div className="flex gap-2 items-center">
             {selectedRowIds.length > 0 && (
               <div className="flex items-center gap-2 mr-4 animate-in fade-in slide-in-from-right-4 duration-300">
                 <span className="text-xs font-bold text-brand-600 bg-brand-50 px-2 py-1 rounded-md">{selectedRowIds.length} selected</span>
-                <Button variant="outline" className="text-xs h-8 px-3 border-brand-200 text-brand-700 bg-brand-50 hover:bg-brand-100" onClick={() => handleBulkAction('Approved')}>Approve All</Button>
-                <Button variant="outline" className="text-xs h-8 px-3 border-red-200 text-red-700 bg-red-50 hover:bg-danger-50" onClick={() => handleBulkAction('Rejected')}>Reject All</Button>
+                <Button variant="outline" className="text-xs h-8 px-3 border-brand-200 text-brand-700 bg-brand-50 hover:bg-brand-100" onClick={() => handleBulkAction('Approved')} disabled={actionInProgress}>Approve All</Button>
+                <Button variant="outline" className="text-xs h-8 px-3 border-red-200 text-red-700 bg-red-50 hover:bg-danger-50" onClick={() => handleBulkAction('Rejected')} disabled={actionInProgress}>Reject All</Button>
               </div>
             )}
             <select
               className="text-xs h-8 px-2 border border-soft rounded-md outline-none bg-white text-secondary"
               value={filterStatus}
-              onChange={(e) => { setFilterStatus(e.target.value); setCurrentPage(1); setSelectedRowIds([]); }}
+              onChange={(e) => setFilterStatus(e.target.value)}
             >
               <option value="All">All Status</option>
               <option value="Pending">Pending</option>
@@ -164,7 +295,7 @@ export function RewardRequests() {
                   <input
                     type="checkbox"
                     className="rounded border-strong text-brand-600 focus:ring-brand-500 w-4 h-4 cursor-pointer"
-                    checked={currentRequests.length > 0 && selectedRowIds.length === currentRequests.length}
+                    checked={requests.length > 0 && selectedRowIds.length === requests.length}
                     onChange={handleSelectAll}
                   />
                 </th>
@@ -178,7 +309,11 @@ export function RewardRequests() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {currentRequests.map((req: any, idx: number) => (
+              {isLoading ? (
+                <tr><td colSpan={8} className="px-5 py-12 text-center text-tertiary">Loading data...</td></tr>
+              ) : requests.length === 0 ? (
+                <tr><td colSpan={8} className="px-5 py-12 text-center text-tertiary">No requests found.</td></tr>
+              ) : requests.map((req: any, idx: number) => (
                 <motion.tr
                   key={req.id}
                   initial={{ opacity: 0, x: -10 }}
@@ -203,7 +338,7 @@ export function RewardRequests() {
                       </div>
                     </div>
                   </td>
-                  <td className="px-5 py-3 text-xs text-secondary font-mono font-medium">{req.id}</td>
+                  <td className="px-5 py-3 text-xs text-secondary font-mono font-medium">{req.id.substring(0, 8)}...</td>
                   <td className="px-5 py-3 text-sm font-semibold text-primary">{req.giftCard}</td>
                   <td className="px-5 py-3 text-sm font-bold text-brand-600">{req.points.toLocaleString()}</td>
                   <td className="px-5 py-3 text-xs text-secondary">{new Date(req.date).toLocaleDateString()}</td>
@@ -233,19 +368,11 @@ export function RewardRequests() {
             </tbody>
           </table>
           <div className="p-4 border-t border-soft flex items-center justify-between">
-            <span className="text-xs text-secondary font-medium">Showing {filteredRequests.length > 0 ? startIndex + 1 : 0} to {Math.min(startIndex + itemsPerPage, filteredRequests.length)} of {filteredRequests.length} results</span>
+            <span className="text-xs text-secondary font-medium">Page {cursorHistory.length + 1}</span>
             <div className="flex gap-1">
-              <Button variant="outline" className="h-7 text-xs px-2 border-soft" disabled={currentPage === 1} onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}>Previous</Button>
-              <Button variant="outline" className={`h-7 text-xs px-2 border-soft ${currentPage === 1 ? 'bg-subtle' : ''}`} onClick={() => setCurrentPage(1)}>1</Button>
-              {currentPage > 3 && <span className="px-1 text-tertiary">...</span>}
-              {Array.from({ length: totalPages }).map((_, i) => i + 1).filter(p => p !== 1 && p !== totalPages && Math.abs(currentPage - p) <= 1).map(p => (
-                <Button key={p} variant="outline" className={`h-7 text-xs px-2 border-soft ${currentPage === p ? 'bg-subtle' : ''}`} onClick={() => setCurrentPage(p)}>{p}</Button>
-              ))}
-              {currentPage < totalPages - 2 && <span className="px-1 text-tertiary">...</span>}
-              {totalPages > 1 && (
-                <Button variant="outline" className={`h-7 text-xs px-2 border-soft ${currentPage === totalPages ? 'bg-subtle' : ''}`} onClick={() => setCurrentPage(totalPages)}>{totalPages}</Button>
-              )}
-              <Button variant="outline" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages} className="h-7 text-xs px-2 border-soft">Next</Button>
+              <Button variant="outline" className="h-7 text-xs px-2 border-soft" disabled={cursorHistory.length === 0 || isLoading} onClick={handlePrevious}>Previous</Button>
+              <Button variant="outline" className="h-7 text-xs px-2 border-soft bg-subtle" disabled>{cursorHistory.length + 1}</Button>
+              <Button variant="outline" onClick={handleNext} disabled={!nextCursor || isLoading} className="h-7 text-xs px-2 border-soft">Next</Button>
             </div>
           </div>
         </div>
@@ -259,9 +386,9 @@ export function RewardRequests() {
         footer={
           selectedRequest?.status === 'Pending' ? (
             <div className="flex justify-end gap-3">
-              <Button variant="outline" onClick={() => setIsDrawerOpen(false)}>Cancel</Button>
-              <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setIsRejectModalOpen(true)}>Reject</Button>
-              <Button className="bg-brand-600 hover:bg-brand-700" onClick={() => setIsApproveModalOpen(true)}>Approve Request</Button>
+              <Button variant="outline" onClick={() => setIsDrawerOpen(false)} disabled={actionInProgress}>Cancel</Button>
+              <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => setIsRejectModalOpen(true)} disabled={actionInProgress}>Reject</Button>
+              <Button className="bg-brand-600 hover:bg-brand-700" onClick={() => setIsApproveModalOpen(true)} disabled={actionInProgress}>Approve Request</Button>
             </div>
           ) : (
             <div className="flex justify-end"><Button variant="outline" onClick={() => setIsDrawerOpen(false)}>Close</Button></div>
@@ -290,7 +417,7 @@ export function RewardRequests() {
                     <p className="font-mono text-xs text-primary">{selectedRequest.user.id}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-secondary font-medium mb-0.5">Current Points</p>
+                    <p className="text-xs text-secondary font-medium mb-0.5">Points Requested</p>
                     <p className="font-bold text-brand-600">{selectedRequest.user.points.toLocaleString()} pts</p>
                   </div>
                 </div>
@@ -315,30 +442,34 @@ export function RewardRequests() {
             {/* History */}
             <div className="grid grid-cols-2 gap-6">
               <section>
-                <h4 className="text-sm font-bold text-primary mb-3 flex items-center gap-2"><History className="w-4 h-4 text-secondary" /> Reward History</h4>
+                <h4 className="text-sm font-bold text-primary mb-3 flex items-center gap-2"><History className="w-4 h-4 text-secondary" /> Request Info</h4>
                 <div className="bg-subtle rounded-xl p-4 border border-soft space-y-3">
-                  <div className="flex justify-between items-center"><span className="text-xs text-secondary">Total Earned</span><span className="font-bold text-brand-600">24,500</span></div>
-                  <div className="flex justify-between items-center"><span className="text-xs text-secondary">Total Redeemed</span><span className="font-bold text-red-600">-12,000</span></div>
-                  <div className="flex justify-between items-center pt-2 border-t border-soft"><span className="text-xs font-bold text-primary">Net Balance</span><span className="font-bold text-brand-600">12,500</span></div>
+                  <div className="flex justify-between items-center"><span className="text-xs text-secondary">Monetary Value</span><span className="font-bold text-brand-600">{selectedRequest.currency} {selectedRequest.amount}</span></div>
+                  <div className="flex justify-between items-center"><span className="text-xs text-secondary">Status</span><span className="font-bold text-primary">{selectedRequest.status}</span></div>
+                  {selectedRequest.ledgerId && (
+                    <div className="flex justify-between items-center pt-2 border-t border-soft"><span className="text-xs font-bold text-primary">Ledger ID</span><span className="font-mono text-[10px] text-tertiary">{selectedRequest.ledgerId.substring(0,8)}...</span></div>
+                  )}
                 </div>
               </section>
               <section>
-                <h4 className="text-sm font-bold text-primary mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-secondary" /> Recent Participation</h4>
+                <h4 className="text-sm font-bold text-primary mb-3 flex items-center gap-2"><Activity className="w-4 h-4 text-secondary" /> Processing Info</h4>
                 <div className="bg-subtle rounded-xl p-4 border border-soft space-y-3">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-xs font-bold text-primary">Beach Cleanup 2026</p>
-                      <p className="text-[10px] text-secondary">2 weeks ago</p>
+                  {selectedRequest.reviewedBy && (
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="text-xs font-bold text-primary">Reviewed By</p>
+                        <p className="text-[10px] text-secondary">{selectedRequest.reviewedBy}</p>
+                      </div>
                     </div>
-                    <span className="text-xs font-bold text-brand-600">+500 pts</span>
-                  </div>
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="text-xs font-bold text-primary">Recycling Workshop</p>
-                      <p className="text-[10px] text-secondary">1 month ago</p>
-                    </div>
-                    <span className="text-xs font-bold text-brand-600">+250 pts</span>
-                  </div>
+                  )}
+                  {selectedRequest.rejectionReason && (
+                     <div className="flex justify-between items-start">
+                     <div>
+                       <p className="text-xs font-bold text-danger">Rejection Reason</p>
+                       <p className="text-[10px] text-danger">{selectedRequest.rejectionReason}</p>
+                     </div>
+                   </div>
+                  )}
                 </div>
               </section>
             </div>
@@ -352,26 +483,21 @@ export function RewardRequests() {
                   <p className="text-sm font-bold text-primary">Request Submitted</p>
                   <p className="text-xs text-secondary">{new Date(selectedRequest.date).toLocaleString()}</p>
                 </div>
-                <div className="relative">
-                  <div className="absolute -left-[23px] w-3 h-3 rounded-full bg-amber-500 ring-4 ring-amber-50"></div>
-                  <p className="text-sm font-bold text-primary">Under Review</p>
-                  <p className="text-xs text-secondary">Currently pending admin action</p>
-                </div>
+                {selectedRequest.status !== 'Pending' ? (
+                  <div className="relative">
+                    <div className="absolute -left-[23px] w-3 h-3 rounded-full bg-success ring-4 ring-green-50"></div>
+                    <p className="text-sm font-bold text-primary">Request {selectedRequest.status}</p>
+                    <p className="text-xs text-secondary">{selectedRequest.reviewedAt ? new Date(selectedRequest.reviewedAt).toLocaleString() : 'Recently'}</p>
+                  </div>
+                ) : (
+                  <div className="relative">
+                    <div className="absolute -left-[23px] w-3 h-3 rounded-full bg-amber-500 ring-4 ring-amber-50"></div>
+                    <p className="text-sm font-bold text-primary">Under Review</p>
+                    <p className="text-xs text-secondary">Currently pending admin action</p>
+                  </div>
+                )}
               </div>
             </section>
-
-            {/* Admin Notes */}
-            {selectedRequest.status === 'Pending' && (
-              <section>
-                <label className="text-sm font-bold text-primary mb-2 block">Admin Notes (Internal)</label>
-                <textarea
-                  value={adminNotes}
-                  onChange={(e) => setAdminNotes(e.target.value)}
-                  className="w-full h-24 p-3 bg-white border border-soft rounded-xl text-sm focus:ring-2 focus:ring-brand-500 outline-none resize-none"
-                  placeholder="Add any internal notes about this request..."
-                />
-              </section>
-            )}
 
           </div>
         )}
@@ -384,15 +510,8 @@ export function RewardRequests() {
             You are about to approve <strong>{selectedRequest?.giftCard}</strong> for <strong>{selectedRequest?.user.name}</strong>. This will deduct <strong>{selectedRequest?.points.toLocaleString()} points</strong> from their account permanently.
           </div>
           <div className="flex justify-end gap-3 mt-6">
-            <Button variant="outline" onClick={() => setIsApproveModalOpen(false)}>Cancel</Button>
-            <Button className="bg-brand-600 hover:bg-brand-700" onClick={() => {
-              if (selectedRequest) {
-                updateRequestStatus(selectedRequest.id, 'Approved');
-              }
-              toast.success('Reward request approved!');
-              setIsApproveModalOpen(false);
-              setIsDrawerOpen(false);
-            }}>Confirm Approval</Button>
+            <Button variant="outline" onClick={() => setIsApproveModalOpen(false)} disabled={actionInProgress}>Cancel</Button>
+            <Button className="bg-brand-600 hover:bg-brand-700" isLoading={actionInProgress} disabled={actionInProgress} onClick={approveRequest}>Confirm Approval</Button>
           </div>
         </div>
       </Modal>
@@ -411,28 +530,23 @@ export function RewardRequests() {
               className="w-full p-2.5 bg-subtle border border-soft rounded-lg text-sm mb-3"
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
+              disabled={actionInProgress}
             >
               <option value="">Select a reason...</option>
-              <option value="suspicious">Suspicious activity detected</option>
-              <option value="points">Insufficient point balance validation</option>
-              <option value="stock">Requested item out of stock</option>
-              <option value="other">Other (Specify in notes)</option>
+              <option value="Suspicious activity detected">Suspicious activity detected</option>
+              <option value="Insufficient point balance validation">Insufficient point balance validation</option>
+              <option value="Requested item out of stock">Requested item out of stock</option>
+              <option value="Other">Other (Specify in notes)</option>
             </select>
           </div>
 
           <div className="flex justify-end gap-3 mt-6">
-            <Button variant="outline" onClick={() => setIsRejectModalOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => setIsRejectModalOpen(false)} disabled={actionInProgress}>Cancel</Button>
             <Button
               className="bg-red-600 hover:bg-red-700"
-              disabled={!rejectReason}
-              onClick={() => {
-                if (selectedRequest) {
-                  updateRequestStatus(selectedRequest.id, 'Rejected');
-                }
-                toast.success('Reward request rejected.');
-                setIsRejectModalOpen(false);
-                setIsDrawerOpen(false);
-              }}
+              disabled={!rejectReason || actionInProgress}
+              isLoading={actionInProgress}
+              onClick={rejectRequest}
             >
               Confirm Rejection
             </Button>
